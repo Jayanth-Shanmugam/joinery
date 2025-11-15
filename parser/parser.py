@@ -28,14 +28,11 @@ class Query:
             if not table.alias:
                 raise ValueError(f"No alias defined for table {table.name}")
 
-            self.tables[table.name].append(table.alias)
+            self.tables[table.alias].append(table.name)
 
     def _extract_columns(self):
         for column in self.ast.find_all(exp.Column):
-            if not column.alias:
-                raise ValueError(f"No alias defined for column {column.name}")
-
-            self.columns[column.alias].append(column.name)
+            self.columns[column.table].append(column.name)
 
     def _flatten_conjuncts(
         self, expr: sqlglot.Expression | None
@@ -74,7 +71,25 @@ class Query:
                 if len(tbls) == 1:
                     t = next(iter(tbls))
                     self.pushable_predicates[t].append(pred)
-                    print(pred)
+
+    def build_query(self):
+        self._extract_tables()
+        self._extract_columns()
+        self._pushdown_preds()
+
+        for table in self.tables:
+            if not self.columns.get(table):
+                raise ValueError(f"Table {table} does not exist in columns!")
+            else:
+                cols: str = ", ".join(self.columns.get(table))
+                preds: str | None = None
+                if preds_list := self.pushable_predicates.get(table):
+                    preds = " AND ".join([pred.sql() for pred in preds_list])
+                    print(
+                        f"SELECT {cols} FROM {self.tables[table][0]} WHERE 1=1 AND {preds}"
+                    )
+                else:
+                    print(f"SELECT {cols} FROM {self.tables[table][0]}")
 
 
 if __name__ == "__main__":
@@ -91,7 +106,6 @@ if __name__ == "__main__":
             a.year = b.year AND
             a.status = 'ACTIVE';
     """
-
+    # print(repr(parse_one(query_str)))
     query = Query(query_str)
-    query._pushdown_preds()
-    print(query.pushable_predicates)
+    query.build_query()
